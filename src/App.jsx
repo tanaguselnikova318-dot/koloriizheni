@@ -71,6 +71,35 @@ function fileToBase64(file) {
   })
 }
 
+// Resize + compress image to keep base64 under Vercel's 4.5MB body limit
+function compressImage(file, maxPx = 1024, quality = 0.82) {
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    const url = URL.createObjectURL(file)
+    img.onload = () => {
+      URL.revokeObjectURL(url)
+      const scale = Math.min(1, maxPx / Math.max(img.width, img.height))
+      const w = Math.round(img.width * scale)
+      const h = Math.round(img.height * scale)
+      const canvas = document.createElement('canvas')
+      canvas.width = w; canvas.height = h
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h)
+      canvas.toBlob(blob => {
+        if (!blob) { reject(new Error('compress failed')); return }
+        const reader = new FileReader()
+        reader.onload = () => resolve({
+          base64: reader.result.split(',')[1],
+          mimeType: 'image/jpeg'
+        })
+        reader.onerror = reject
+        reader.readAsDataURL(blob)
+      }, 'image/jpeg', quality)
+    }
+    img.onerror = reject
+    img.src = url
+  })
+}
+
 async function createThumbnail(url, size = 160) {
   return new Promise(resolve => {
     const img = new Image()
@@ -396,10 +425,10 @@ export default function App() {
     setError(null); setAnalyzing(true)
     const imageUrl = URL.createObjectURL(file)
     setPendingImage(imageUrl)
-    const base64 = await fileToBase64(file)
-    setPendingBase64(base64); setPendingMime(file.type)
     try {
-      const data = await callAPI({ base64, mimeType: file.type, voiceHint: hint })
+      const { base64, mimeType } = await compressImage(file)
+      setPendingBase64(base64); setPendingMime(mimeType)
+      const data = await callAPI({ base64, mimeType, voiceHint: hint })
       setPendingResult({ ...data, imageUrl })
     } catch (e) {
       setError(e.message); setPendingImage(null)
