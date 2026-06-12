@@ -72,7 +72,7 @@ function fileToBase64(file) {
 }
 
 // Resize + compress image to keep base64 under Vercel's 4.5MB body limit
-function compressImage(file, maxPx = 1024, quality = 0.82) {
+function compressImage(file, maxPx = 800, quality = 0.78) {
   return new Promise((resolve, reject) => {
     const img = new Image()
     const url = URL.createObjectURL(file)
@@ -409,11 +409,15 @@ export default function App() {
   }
 
   const callAPI = async (body) => {
-    const res  = await fetch('/api/analyze', {
+    const res = await fetch('/api/analyze', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body)
     })
+    if (!res.ok) {
+      if (res.status === 413) throw new Error('Фото слишком большое — попробуй выбрать другое')
+      throw new Error(`Ошибка сервера (${res.status})`)
+    }
     const data = await res.json()
     if (data.error) throw new Error(data.error)
     return data
