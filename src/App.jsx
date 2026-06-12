@@ -33,21 +33,20 @@ function loadBudget() {
 function accentFor(id) { return ACCENTS[id % ACCENTS.length] }
 
 function statusInfo(pct, over) {
-  if (over)      return { text: 'Лимит превышен!',              emoji: '🚨' }
-  if (pct === 0) return { text: 'Сфотографируй первое блюдо',   emoji: '🌅' }
-  if (pct < 25)  return { text: 'Отличный старт!',              emoji: '🌱' }
-  if (pct < 50)  return { text: 'Хороший темп',                 emoji: '💪' }
-  if (pct < 75)  return { text: 'Уже на полпути',               emoji: '⚡' }
-  if (pct < 90)  return { text: 'Притормози немного',           emoji: '🎯' }
-  return               { text: 'Почти лимит!',                  emoji: '⚠️' }
+  if (over)      return { text: 'Лимит превышен!',            emoji: '🚨' }
+  if (pct === 0) return { text: 'Сфотографируй первое блюдо', emoji: '🌅' }
+  if (pct < 25)  return { text: 'Отличный старт!',            emoji: '🌱' }
+  if (pct < 50)  return { text: 'Хороший темп',               emoji: '💪' }
+  if (pct < 75)  return { text: 'Уже на полпути',             emoji: '⚡' }
+  if (pct < 90)  return { text: 'Притормози немного',         emoji: '🎯' }
+  return               { text: 'Почти лимит!',                emoji: '⚠️' }
 }
 
 function getStreak(history) {
   let s = 0
   for (let i = 0; i < 365; i++) {
     const d = new Date(); d.setDate(d.getDate() - i)
-    const meals = history[d.toDateString()] || []
-    if (meals.length > 0) s++
+    if ((history[d.toDateString()] || []).length > 0) s++
     else if (i > 0) break
   }
   return s
@@ -85,6 +84,46 @@ async function createThumbnail(url, size = 160) {
     img.onerror = () => resolve(url)
     img.src = url
   })
+}
+
+// ── Voice Hook ────────────────────────────────────────────────────────────────
+
+function useVoice() {
+  const [listening, setListening]   = useState(false)
+  const [transcript, setTranscript] = useState('')
+  const recRef = useRef(null)
+  const cbRef  = useRef(null)
+  const supported = typeof window !== 'undefined' &&
+    !!(window.SpeechRecognition || window.webkitSpeechRecognition)
+
+  const start = useCallback((onFinal) => {
+    if (!supported) return
+    cbRef.current = onFinal
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition
+    const rec = new SR()
+    rec.lang = 'ru-RU'
+    rec.continuous = false
+    rec.interimResults = true
+    rec.onresult = (e) => {
+      const t = Array.from(e.results).map(r => r[0].transcript).join('')
+      setTranscript(t)
+      if (e.results[e.results.length - 1].isFinal) {
+        cbRef.current?.(t)
+        setListening(false)
+      }
+    }
+    rec.onerror = () => setListening(false)
+    rec.onend   = () => setListening(false)
+    recRef.current = rec
+    setTranscript('')
+    rec.start()
+    setListening(true)
+  }, [supported])
+
+  const stop  = useCallback(() => { recRef.current?.stop(); setListening(false) }, [])
+  const clear = useCallback(() => setTranscript(''), [])
+
+  return { listening, transcript, start, stop, clear, supported }
 }
 
 // ── Fuel Meter ────────────────────────────────────────────────────────────────
@@ -175,7 +214,10 @@ function MacroBar({ label, value, max, gradient }) {
 // ── History Chart ─────────────────────────────────────────────────────────────
 
 function HistoryChart({ history, budget }) {
-  const days = Array.from({ length: 7 }, (_, i) => {
+  const [period, setPeriod] = useState('week')
+
+  // 7 days
+  const weekData = Array.from({ length: 7 }, (_, i) => {
     const d = new Date(); d.setDate(d.getDate() - (6 - i))
     const key = d.toDateString()
     const calories = (history[key] || []).reduce((s, m) => s + m.calories, 0)
@@ -183,23 +225,67 @@ function HistoryChart({ history, budget }) {
     return { key, calories, label, isToday: 6 - i === 0 }
   })
 
-  const maxCal = Math.max(...days.map(d => d.calories), budget)
+  // 30 days
+  const monthData = Array.from({ length: 30 }, (_, i) => {
+    const d = new Date(); d.setDate(d.getDate() - (29 - i))
+    const key = d.toDateString()
+    const calories = (history[key] || []).reduce((s, m) => s + m.calories, 0)
+    const dayNum = d.getDate()
+    const label = i === 0 || i === 29 || dayNum % 5 === 0 ? String(dayNum) : ''
+    return { key, calories, label, isToday: i === 29 }
+  })
+
+  // 12 months (average per day in each month)
+  const yearData = Array.from({ length: 12 }, (_, i) => {
+    const now = new Date()
+    const target = new Date(now.getFullYear(), now.getMonth() - (11 - i), 1)
+    const yr = target.getFullYear(), mo = target.getMonth()
+    const daysInMonth = new Date(yr, mo + 1, 0).getDate()
+    let total = 0, days = 0
+    for (let day = 1; day <= daysInMonth; day++) {
+      const cal = (history[new Date(yr, mo, day).toDateString()] || []).reduce((s, m) => s + m.calories, 0)
+      if (cal > 0) { total += cal; days++ }
+    }
+    const isCurrent = yr === now.getFullYear() && mo === now.getMonth()
+    return {
+      key: `${yr}-${mo}`,
+      calories: days > 0 ? Math.round(total / days) : 0,
+      label: target.toLocaleDateString('ru-RU', { month: 'short' }),
+      isToday: isCurrent
+    }
+  })
+
+  const data   = period === 'week' ? weekData : period === 'month' ? monthData : yearData
+  const maxCal = Math.max(...data.map(d => d.calories), budget)
+
+  const subLabel = period === 'year'
+    ? 'средн. ккал/день по месяцам'
+    : `норма ${budget.toLocaleString()} ккал`
 
   return (
     <div className="history-chart glass">
       <div className="history-header">
-        <span className="section-title">7 дней</span>
-        <span className="history-sub">норма {budget.toLocaleString()} ккал</span>
+        <span className="section-title">История</span>
+        <div className="period-tabs">
+          {[['week','7д'],['month','30д'],['year','Год']].map(([p, lbl]) => (
+            <button key={p}
+              className={`period-tab ${period === p ? 'active' : ''}`}
+              onClick={() => setPeriod(p)}>
+              {lbl}
+            </button>
+          ))}
+        </div>
       </div>
-      <div className="chart-area">
-        {days.map(day => {
-          const barH = day.calories > 0 ? Math.max((day.calories / maxCal) * 100, 4) : 0
+      <p className="history-sub">{subLabel}</p>
+      <div className={`chart-area ${period === 'month' ? 'chart-dense' : ''}`}>
+        {data.map(day => {
+          const barH   = day.calories > 0 ? Math.max((day.calories / maxCal) * 100, 4) : 0
           const budgetH = (budget / maxCal) * 100
-          const over = day.calories > budget
+          const over   = day.calories > budget
           return (
             <div key={day.key} className={`chart-col ${day.isToday ? 'today' : ''}`}>
               <div className="bar-wrap">
-                {day.calories > 0 && (
+                {day.calories > 0 && period !== 'month' && (
                   <span className="bar-val">{(day.calories / 1000).toFixed(1)}к</span>
                 )}
                 <div className="bar-track">
@@ -207,14 +293,16 @@ function HistoryChart({ history, budget }) {
                   <div className="bar-fill" style={{
                     height: `${barH}%`,
                     background: over
-                      ? 'linear-gradient(to top, #f43f5e, #fb7185)'
+                      ? 'linear-gradient(to top,#f43f5e,#fb7185)'
                       : day.isToday
-                      ? 'linear-gradient(to top, #6366f1, #a5b4fc)'
-                      : 'linear-gradient(to top, rgba(99,102,241,0.55), rgba(165,180,252,0.3))'
+                      ? 'linear-gradient(to top,#6366f1,#a5b4fc)'
+                      : period === 'year'
+                      ? 'linear-gradient(to top,rgba(34,211,238,0.7),rgba(103,232,249,0.35))'
+                      : 'linear-gradient(to top,rgba(99,102,241,0.55),rgba(165,180,252,0.3))'
                   }} />
                 </div>
               </div>
-              <span className="bar-label">{day.label}</span>
+              {day.label && <span className="bar-label">{day.label}</span>}
             </div>
           )
         })}
@@ -230,12 +318,20 @@ function MealCard({ meal, onDelete }) {
   return (
     <div className="meal-card" style={{ '--accent': accent }}>
       <div className="meal-img-wrap">
-        <img src={meal.imageUrl} alt={meal.foodName}
-          onError={e => { e.target.style.display = 'none'; e.target.nextElementSibling.style.display = 'flex' }}
-        />
-        <div className="meal-img-fallback" style={{ background: accent }}>
-          {meal.foodName?.[0] ?? '🍽'}
-        </div>
+        {meal.imageUrl ? (
+          <>
+            <img src={meal.imageUrl} alt={meal.foodName}
+              onError={e => { e.target.style.display='none'; e.target.nextElementSibling.style.display='flex' }}
+            />
+            <div className="meal-img-fallback" style={{ background: accent }}>
+              {meal.foodName?.[0] ?? '🍽'}
+            </div>
+          </>
+        ) : (
+          <div className="meal-img-fallback" style={{ background: accent, display:'flex' }}>
+            🎙️
+          </div>
+        )}
         <button className="meal-del" onClick={() => onDelete(meal.id)}>×</button>
       </div>
       <div className="meal-body">
@@ -255,18 +351,22 @@ function MealCard({ meal, onDelete }) {
 // ── App ───────────────────────────────────────────────────────────────────────
 
 export default function App() {
-  const [history,       setHistory]       = useState(loadHistory)
-  const [budget,        setBudget]        = useState(loadBudget)
-  const [analyzing,     setAnalyzing]     = useState(false)
-  const [dragOver,      setDragOver]      = useState(false)
-  const [pendingResult, setPendingResult] = useState(null)
-  const [pendingImage,  setPendingImage]  = useState(null)
-  const [showSettings,  setShowSettings]  = useState(false)
-  const [error,         setError]         = useState(null)
+  const [history,        setHistory]        = useState(loadHistory)
+  const [budget,         setBudget]         = useState(loadBudget)
+  const [analyzing,      setAnalyzing]      = useState(false)
+  const [dragOver,       setDragOver]       = useState(false)
+  const [pendingResult,  setPendingResult]  = useState(null)
+  const [pendingImage,   setPendingImage]   = useState(null)
+  const [pendingBase64,  setPendingBase64]  = useState(null)
+  const [pendingMime,    setPendingMime]    = useState(null)
+  const [showSettings,   setShowSettings]   = useState(false)
+  const [error,          setError]          = useState(null)
+  const [voiceCommitted, setVoiceCommitted] = useState('')
   const fileRef = useRef(null)
+  const voice   = useVoice()
 
-  const meals       = history[TODAY] || []
-  const consumed    = meals.reduce((s, m) => s + m.calories, 0)
+  const meals        = history[TODAY] || []
+  const consumed     = meals.reduce((s, m) => s + m.calories, 0)
   const totalProtein = meals.reduce((s, m) => s + (m.protein || 0), 0)
   const totalCarbs   = meals.reduce((s, m) => s + (m.carbs   || 0), 0)
   const totalFat     = meals.reduce((s, m) => s + (m.fat     || 0), 0)
@@ -279,27 +379,60 @@ export default function App() {
     localStorage.setItem(HISTORY_KEY, JSON.stringify(h))
   }
 
-  const analyzeImage = async (file) => {
+  const callAPI = async (body) => {
+    const res  = await fetch('/api/analyze', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    })
+    const data = await res.json()
+    if (data.error) throw new Error(data.error)
+    return data
+  }
+
+  // Photo analysis (+ optional voice hint)
+  const analyzeImage = async (file, hint = '') => {
     if (!file?.type.startsWith('image/')) return
     setError(null); setAnalyzing(true)
     const imageUrl = URL.createObjectURL(file)
     setPendingImage(imageUrl)
     const base64 = await fileToBase64(file)
+    setPendingBase64(base64); setPendingMime(file.type)
     try {
-      const res  = await fetch('/api/analyze', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ base64, mimeType: file.type })
-      })
-      const data = await res.json()
-      if (data.error) throw new Error(data.error)
+      const data = await callAPI({ base64, mimeType: file.type, voiceHint: hint })
       setPendingResult({ ...data, imageUrl })
     } catch (e) {
+      setError(e.message); setPendingImage(null)
+    } finally { setAnalyzing(false) }
+  }
+
+  // Voice-only (no photo)
+  const analyzeText = async (text) => {
+    if (!text.trim()) return
+    setError(null); setAnalyzing(true)
+    setPendingImage(null); setPendingBase64(null)
+    try {
+      const data = await callAPI({ voiceHint: text, textOnly: true })
+      setPendingResult({ ...data, imageUrl: null })
+    } catch (e) {
       setError(e.message)
-      setPendingImage(null)
-    } finally {
-      setAnalyzing(false)
-    }
+    } finally { setAnalyzing(false) }
+  }
+
+  // Re-analyze with voice correction (same photo)
+  const refineResult = async (hint) => {
+    if (!hint.trim()) return
+    setError(null); setAnalyzing(true)
+    const prevImg = pendingResult?.imageUrl
+    try {
+      const body = pendingBase64
+        ? { base64: pendingBase64, mimeType: pendingMime, voiceHint: hint }
+        : { voiceHint: hint, textOnly: true }
+      const data = await callAPI(body)
+      setPendingResult({ ...data, imageUrl: prevImg })
+    } catch (e) {
+      setError(e.message)
+    } finally { setAnalyzing(false) }
   }
 
   const handleDrop = useCallback((e) => {
@@ -308,7 +441,7 @@ export default function App() {
   }, [])
 
   const addMeal = async () => {
-    const thumb = await createThumbnail(pendingResult.imageUrl)
+    const thumb = pendingResult.imageUrl ? await createThumbnail(pendingResult.imageUrl) : null
     const id = Date.now()
     const meal = {
       id, ...pendingResult, imageUrl: thumb,
@@ -316,22 +449,42 @@ export default function App() {
     }
     saveHistory({ ...history, [TODAY]: [meal, ...meals] })
     setPendingResult(null); setPendingImage(null)
+    setPendingBase64(null); setPendingMime(null)
+    setVoiceCommitted(''); voice.clear()
   }
 
-  const deleteMeal = (id) => {
-    saveHistory({ ...history, [TODAY]: meals.filter(m => m.id !== id) })
-  }
-
+  const deleteMeal  = (id) => saveHistory({ ...history, [TODAY]: meals.filter(m => m.id !== id) })
   const updateBudget = (val) => {
     const v = Math.max(500, Math.min(10000, parseInt(val) || 2000))
     setBudget(v); localStorage.setItem(BUDGET_KEY, v)
   }
+  const cancelPending = () => {
+    setPendingResult(null); setPendingImage(null)
+    setPendingBase64(null); setPendingMime(null)
+    setVoiceCommitted(''); voice.clear(); setError(null)
+  }
 
-  const cancelPending = () => { setPendingResult(null); setPendingImage(null); setError(null) }
-  const showUpload = !analyzing && !pendingResult
-  const proteinMax = budget * 0.25 / 4
-  const carbsMax   = budget * 0.50 / 4
-  const fatMax     = budget * 0.25 / 9
+  // Voice button handlers
+  const handleVoiceRecord = () => {
+    if (voice.listening) { voice.stop(); return }
+    voice.start((final) => setVoiceCommitted(final))
+  }
+
+  const handleVoiceSubmit = () => {
+    const txt = voiceCommitted || voice.transcript
+    if (txt.trim()) { analyzeText(txt); setVoiceCommitted(''); voice.clear() }
+  }
+
+  const handleVoiceRefine = () => {
+    if (voice.listening) { voice.stop(); return }
+    voice.start((final) => refineResult(final))
+  }
+
+  const showUpload   = !analyzing && !pendingResult
+  const voiceDisplay = voice.listening ? voice.transcript : voiceCommitted
+  const proteinMax   = budget * 0.25 / 4
+  const carbsMax     = budget * 0.50 / 4
+  const fatMax       = budget * 0.25 / 9
 
   return (
     <div className="app">
@@ -359,14 +512,13 @@ export default function App() {
 
       <main className="main">
         <FuelMeter consumed={consumed} budget={budget} />
-
         <StatsRow streak={streak} mealsToday={meals.length} weeklyAvg={weeklyAvg} />
 
         {meals.length > 0 && (
           <div className="macros-panel glass">
-            <MacroBar label="Белки"     value={totalProtein} max={proteinMax} gradient="linear-gradient(90deg,#818cf8,#6366f1)" />
-            <MacroBar label="Углеводы"  value={totalCarbs}   max={carbsMax}   gradient="linear-gradient(90deg,#38bdf8,#22d3ee)" />
-            <MacroBar label="Жиры"      value={totalFat}     max={fatMax}     gradient="linear-gradient(90deg,#fb923c,#f59e0b)" />
+            <MacroBar label="Белки"    value={totalProtein} max={proteinMax} gradient="linear-gradient(90deg,#818cf8,#6366f1)" />
+            <MacroBar label="Углеводы" value={totalCarbs}   max={carbsMax}   gradient="linear-gradient(90deg,#38bdf8,#22d3ee)" />
+            <MacroBar label="Жиры"     value={totalFat}     max={fatMax}     gradient="linear-gradient(90deg,#fb923c,#f59e0b)" />
           </div>
         )}
 
@@ -377,32 +529,81 @@ export default function App() {
           </div>
         )}
 
+        {/* ── Upload + Voice ── */}
         {showUpload && (
-          <div className={`upload-zone ${dragOver ? 'drag-over' : ''}`}
-            onDrop={handleDrop}
-            onDragOver={e => { e.preventDefault(); setDragOver(true) }}
-            onDragLeave={() => setDragOver(false)}
-            onClick={() => fileRef.current?.click()}>
-            <div className="upload-icon">📸</div>
-            <p className="upload-title">Сфотографируй еду</p>
-            <p className="upload-hint">или перетащи фото сюда</p>
-            <input ref={fileRef} type="file" accept="image/*" hidden onChange={e => analyzeImage(e.target.files[0])} />
+          <div className="upload-area">
+            <div className={`upload-zone ${dragOver ? 'drag-over' : ''}`}
+              onDrop={handleDrop}
+              onDragOver={e => { e.preventDefault(); setDragOver(true) }}
+              onDragLeave={() => setDragOver(false)}
+              onClick={() => fileRef.current?.click()}>
+              <div className="upload-icon">📸</div>
+              <p className="upload-title">Сфотографируй еду</p>
+              <p className="upload-hint">или перетащи фото сюда</p>
+              <input ref={fileRef} type="file" accept="image/*" hidden
+                onChange={e => analyzeImage(e.target.files[0])} />
+            </div>
+
+            {voice.supported && (
+              <div className="voice-section">
+                <div className="voice-divider"><span>или опиши голосом</span></div>
+                <div className="voice-row">
+                  <button
+                    className={`voice-btn ${voice.listening ? 'listening' : ''}`}
+                    onClick={handleVoiceRecord}>
+                    <span className="voice-icon">{voice.listening ? '⏹' : '🎙️'}</span>
+                    <span>{voice.listening ? 'Остановить' : 'Говорить'}</span>
+                    {voice.listening && <span className="voice-pulse" />}
+                  </button>
+                  {voiceDisplay && (
+                    <button className="btn-primary voice-submit-btn" onClick={handleVoiceSubmit}>
+                      Анализировать
+                    </button>
+                  )}
+                </div>
+                {voiceDisplay && (
+                  <div className="voice-transcript">
+                    <span className="voice-transcript-text">
+                      {voiceDisplay || '...'}
+                    </span>
+                  </div>
+                )}
+                {voice.listening && !voiceDisplay && (
+                  <div className="voice-transcript">
+                    <span className="voice-transcript-text muted">Слушаю...</span>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
 
+        {/* ── Analyzing ── */}
         {analyzing && (
           <div className="analyzing glass">
-            <img src={pendingImage} alt="preview" className="analyzing-img" />
-            <div className="analyzing-overlay">
-              <div className="spinner" />
-              <p>Анализирую состав...</p>
-            </div>
+            {pendingImage ? (
+              <>
+                <img src={pendingImage} alt="preview" className="analyzing-img" />
+                <div className="analyzing-overlay">
+                  <div className="spinner" />
+                  <p>Анализирую состав...</p>
+                </div>
+              </>
+            ) : (
+              <div className="analyzing-text">
+                <div className="spinner" />
+                <p>Определяю калории...</p>
+              </div>
+            )}
           </div>
         )}
 
+        {/* ── Result ── */}
         {pendingResult && (
           <div className="result glass slide-up">
-            <img src={pendingResult.imageUrl} alt={pendingResult.foodName} className="result-img" />
+            {pendingResult.imageUrl && (
+              <img src={pendingResult.imageUrl} alt={pendingResult.foodName} className="result-img" />
+            )}
             <div className="result-body">
               <div className="result-head">
                 <div>
@@ -429,6 +630,24 @@ export default function App() {
                   ))}
                 </div>
               )}
+
+              {/* Voice refinement */}
+              {voice.supported && (
+                <div className="voice-refine">
+                  <button
+                    className={`voice-refine-btn ${voice.listening ? 'listening' : ''}`}
+                    onClick={handleVoiceRefine}>
+                    {voice.listening
+                      ? <><span>⏹</span> Остановить</>
+                      : <><span>🎙️</span> Уточнить вес или состав</>}
+                    {voice.listening && <span className="voice-pulse-sm" />}
+                  </button>
+                  {voice.transcript && (
+                    <div className="voice-transcript-sm">«{voice.transcript}»</div>
+                  )}
+                </div>
+              )}
+
               <div className="result-actions">
                 <button className="btn-primary" onClick={addMeal}>+ В журнал</button>
                 <button className="btn-ghost" onClick={cancelPending}>Отмена</button>
@@ -437,6 +656,7 @@ export default function App() {
           </div>
         )}
 
+        {/* ── Meal Log ── */}
         {meals.length > 0 && (
           <section className="meal-log">
             <h3 className="section-title">Сегодня</h3>

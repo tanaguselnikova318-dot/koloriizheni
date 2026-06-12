@@ -378,19 +378,133 @@ html, body {
 .meal-macros { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 2px; }
 .meal-time { font-size: 0.7rem; color: var(--muted); opacity: 0.55; margin-top: auto; }
 
+/* ── Voice Section ────────────────────────────────────────────────────────── */
+
+.upload-area { display: flex; flex-direction: column; }
+
+.voice-section { padding: 0 2px; }
+
+.voice-divider {
+  display: flex; align-items: center; gap: 10px;
+  margin: 14px 0 12px; color: var(--muted);
+  font-size: 0.75rem; font-weight: 500; letter-spacing: 0.04em;
+}
+.voice-divider::before,
+.voice-divider::after {
+  content: ''; flex: 1; height: 1px; background: var(--border);
+}
+
+.voice-row { display: flex; gap: 10px; align-items: center; }
+
+.voice-btn {
+  position: relative; flex: 1;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 13px 20px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 14px; color: var(--text);
+  font-family: inherit; font-size: 0.9rem; font-weight: 600;
+  cursor: pointer; transition: all 0.2s;
+}
+.voice-btn:hover { background: rgba(99,102,241,0.1); border-color: rgba(99,102,241,0.4); }
+.voice-btn.listening {
+  background: rgba(244,63,94,0.1); border-color: rgba(244,63,94,0.4); color: #f43f5e;
+}
+
+.voice-icon { font-size: 1.15rem; }
+
+.voice-pulse {
+  position: absolute; right: 14px;
+  width: 8px; height: 8px; border-radius: 50%; background: #f43f5e;
+  animation: pulse 1.2s ease-in-out infinite;
+}
+@keyframes pulse {
+  0%,100% { transform: scale(1); opacity: 1; }
+  50%      { transform: scale(1.6); opacity: 0.45; }
+}
+
+.voice-submit-btn {
+  flex: 0 0 auto; padding: 13px 16px; font-size: 0.85rem;
+}
+
+.voice-transcript {
+  margin-top: 10px; padding: 11px 15px;
+  background: rgba(255,255,255,0.04); border: 1px solid var(--border);
+  border-radius: 12px; min-height: 42px;
+  display: flex; align-items: center;
+}
+.voice-transcript-text { font-size: 0.88rem; color: var(--text); font-style: italic; }
+.voice-transcript-text.muted { color: var(--muted); }
+
+/* ── Analyzing text-only ──────────────────────────────────────────────────── */
+
+.analyzing-text {
+  padding: 44px 20px;
+  display: flex; flex-direction: column; align-items: center; gap: 14px;
+  color: var(--muted); font-size: 0.875rem;
+}
+
+/* ── Voice Refine (in result card) ───────────────────────────────────────── */
+
+.voice-refine { display: flex; flex-direction: column; gap: 8px; }
+
+.voice-refine-btn {
+  position: relative; width: 100%;
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 16px;
+  background: rgba(255,255,255,0.04);
+  border: 1.5px dashed rgba(99,102,241,0.35);
+  border-radius: 12px; color: var(--muted);
+  font-family: inherit; font-size: 0.85rem; font-weight: 500;
+  cursor: pointer; transition: all 0.2s;
+}
+.voice-refine-btn:hover {
+  background: rgba(99,102,241,0.08); border-color: rgba(99,102,241,0.55); color: var(--text);
+}
+.voice-refine-btn.listening {
+  background: rgba(244,63,94,0.08); border-color: rgba(244,63,94,0.4);
+  border-style: solid; color: #f43f5e;
+}
+
+.voice-pulse-sm {
+  position: absolute; right: 12px;
+  width: 7px; height: 7px; border-radius: 50%; background: #f43f5e;
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+.voice-transcript-sm {
+  padding: 7px 12px; font-size: 0.82rem; font-style: italic;
+  color: #a5b4fc; background: rgba(99,102,241,0.09); border-radius: 8px;
+}
+
 /* ── History Chart ────────────────────────────────────────────────────────── */
 
 .history-chart { padding: 18px 20px 16px; }
 
 .history-header {
-  display: flex; align-items: baseline; gap: 10px; margin-bottom: 16px;
+  display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 6px;
 }
-.history-sub { font-size: 0.72rem; color: var(--muted); }
+
+/* Period tabs */
+.period-tabs {
+  display: flex; gap: 2px;
+  background: rgba(255,255,255,0.05); border-radius: 10px; padding: 3px;
+}
+.period-tab {
+  padding: 4px 10px; border: none; background: transparent;
+  color: var(--muted); font-family: inherit;
+  font-size: 0.72rem; font-weight: 700; letter-spacing: 0.03em;
+  border-radius: 7px; cursor: pointer; transition: all 0.18s;
+}
+.period-tab.active { background: rgba(99,102,241,0.28); color: var(--text); }
+.period-tab:hover:not(.active) { color: var(--text); }
+
+.history-sub { font-size: 0.72rem; color: var(--muted); margin-bottom: 14px; }
 
 .chart-area {
   display: flex; align-items: flex-end; gap: 6px;
   height: 110px;
 }
+.chart-dense { gap: 2px; }
 
 .chart-col {
   flex: 1; display: flex; flex-direction: column;
