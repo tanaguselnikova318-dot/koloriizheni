@@ -552,7 +552,7 @@ export default function App() {
                     className={`voice-btn ${voice.listening ? 'listening' : ''}`}
                     onClick={handleVoiceRecord}>
                     <span className="voice-icon">{voice.listening ? '⏹' : '🎙️'}</span>
-                    <span>{voice.listening ? 'Остановить' : 'Говорить'}</span>
+                    <span>{voice.listening ? 'Остановить' : 'Уточнить'}</span>
                     {voice.listening && <span className="voice-pulse" />}
                   </button>
                   {voiceDisplay && (
