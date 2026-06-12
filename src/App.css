@@ -380,7 +380,34 @@ html, body {
 
 /* ── Voice Section ────────────────────────────────────────────────────────── */
 
-.upload-area { display: flex; flex-direction: column; }
+.upload-area { display: flex; flex-direction: column; gap: 10px; }
+
+/* Camera / Gallery quick buttons */
+.upload-buttons {
+  display: flex; gap: 10px;
+}
+
+.upload-btn {
+  flex: 1; display: flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 14px 10px;
+  border: 1px solid var(--border); border-radius: 16px;
+  font-family: inherit; font-size: 0.95rem; font-weight: 700;
+  cursor: pointer; transition: all 0.2s;
+}
+
+.upload-btn-camera {
+  background: linear-gradient(135deg, rgba(99,102,241,0.18), rgba(139,92,246,0.14));
+  border-color: rgba(99,102,241,0.4); color: #a5b4fc;
+}
+.upload-btn-camera:hover { background: rgba(99,102,241,0.28); }
+
+.upload-btn-gallery {
+  background: rgba(255,255,255,0.05);
+  color: var(--muted);
+}
+.upload-btn-gallery:hover { background: rgba(255,255,255,0.09); color: var(--text); }
+
+.upload-btn-icon { font-size: 1.3rem; }
 
 .voice-section { padding: 0 2px; }
 

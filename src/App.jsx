@@ -391,7 +391,8 @@ export default function App() {
   const [showSettings,   setShowSettings]   = useState(false)
   const [error,          setError]          = useState(null)
   const [voiceCommitted, setVoiceCommitted] = useState('')
-  const fileRef = useRef(null)
+  const fileRef    = useRef(null)
+  const cameraRef  = useRef(null)
   const voice   = useVoice()
 
   const meals        = history[TODAY] || []
@@ -565,6 +566,20 @@ export default function App() {
         {/* ── Upload + Voice ── */}
         {showUpload && (
           <div className="upload-area">
+            <div className="upload-buttons">
+              <button className="upload-btn upload-btn-camera" onClick={() => cameraRef.current?.click()}>
+                <span className="upload-btn-icon">📷</span>
+                <span>Камера</span>
+              </button>
+              <button className="upload-btn upload-btn-gallery" onClick={() => fileRef.current?.click()}>
+                <span className="upload-btn-icon">🖼️</span>
+                <span>Галерея</span>
+              </button>
+              <input ref={cameraRef} type="file" accept="image/*" capture="environment" hidden
+                onChange={e => analyzeImage(e.target.files[0])} />
+              <input ref={fileRef} type="file" accept="image/*" hidden
+                onChange={e => analyzeImage(e.target.files[0])} />
+            </div>
             <div className={`upload-zone ${dragOver ? 'drag-over' : ''}`}
               onDrop={handleDrop}
               onDragOver={e => { e.preventDefault(); setDragOver(true) }}
@@ -573,8 +588,6 @@ export default function App() {
               <div className="upload-icon">📸</div>
               <p className="upload-title">Сфотографируй еду</p>
               <p className="upload-hint">или перетащи фото сюда</p>
-              <input ref={fileRef} type="file" accept="image/*" hidden
-                onChange={e => analyzeImage(e.target.files[0])} />
             </div>
 
             {voice.supported && (
